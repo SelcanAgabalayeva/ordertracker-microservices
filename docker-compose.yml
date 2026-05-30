@@ -1,0 +1,245 @@
+
+networks:
+  ordertracker-network:
+    driver: bridge
+
+services:
+
+  # =========================
+  # DISCOVERY SERVER (EUREKA)
+  # =========================
+  discovery-server:
+    build: ./discovery-server
+    container_name: discovery-server
+    ports:
+      - "8761:8761"
+    networks:
+      - ordertracker-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8761 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+
+  # =========================
+  # API GATEWAY
+  # =========================
+  api-gateway:
+    build: ./api-gateway
+    container_name: api-gateway
+    ports:
+      - "8080:8080"
+    depends_on:
+      discovery-server:
+        condition: service_healthy
+    environment:
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: ${EUREKA_URL}
+      EUREKA_CLIENT_REGISTER_WITH_EUREKA: "true"
+      EUREKA_CLIENT_FETCH_REGISTRY: "true"
+    networks:
+      - ordertracker-network
+    restart: unless-stopped
+
+
+  # =========================
+  # AUTH SERVICE
+  # =========================
+  auth-service:
+    build: ./auth-service
+    container_name: auth-service
+    ports:
+      - "8081:8081"
+    depends_on:
+      discovery-server:
+        condition: service_healthy
+      postgres-auth:
+        condition: service_started
+    environment:
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: ${EUREKA_URL}
+
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-auth:5432/${AUTH_DB}
+      SPRING_DATASOURCE_USERNAME: ${AUTH_USER}
+      SPRING_DATASOURCE_PASSWORD: ${AUTH_PASS}
+
+      JWT_SECRET: ${JWT_SECRET}
+      EUREKA_CLIENT_REGISTER_WITH_EUREKA: "true"
+      EUREKA_CLIENT_FETCH_REGISTRY: "true"
+    networks:
+      - ordertracker-network
+    restart: unless-stopped
+
+
+  # =========================
+  # ORDER SERVICE
+  # =========================
+  order-service:
+    build: ./order-service
+    container_name: order-service
+    ports:
+      - "8082:8082"
+    depends_on:
+      discovery-server:
+        condition: service_healthy
+      postgres-order:
+        condition: service_started
+    environment:
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: ${EUREKA_URL}
+
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-order:5432/${ORDER_DB}
+      SPRING_DATASOURCE_USERNAME: ${ORDER_USER}
+      SPRING_DATASOURCE_PASSWORD: ${ORDER_PASS}
+
+      JWT_SECRET: ${JWT_SECRET}
+      EUREKA_CLIENT_REGISTER_WITH_EUREKA: "true"
+      EUREKA_CLIENT_FETCH_REGISTRY: "true"
+    networks:
+      - ordertracker-network
+    restart: unless-stopped
+
+
+  # =========================
+  # WEBHOOK SERVICE
+  # =========================
+  webhook-service:
+    build: ./webhook-service
+    container_name: webhook-service
+    ports:
+      - "8083:8083"
+    depends_on:
+      discovery-server:
+        condition: service_healthy
+      postgres-webhook:
+        condition: service_started
+    environment:
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: ${EUREKA_URL}
+
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-webhook:5432/${WEBHOOK_DB}
+      SPRING_DATASOURCE_USERNAME: ${WEBHOOK_USER}
+      SPRING_DATASOURCE_PASSWORD: ${WEBHOOK_PASS}
+
+      JWT_SECRET: ${JWT_SECRET}
+      EUREKA_CLIENT_REGISTER_WITH_EUREKA: "true"
+      EUREKA_CLIENT_FETCH_REGISTRY: "true"
+    networks:
+      - ordertracker-network
+    restart: unless-stopped
+
+
+  # =========================
+  # NOTIFICATION SERVICE
+  # =========================
+  notification-service:
+    build: ./notification-service
+    container_name: notification-service
+    ports:
+      - "8084:8084"
+    depends_on:
+      discovery-server:
+        condition: service_healthy
+      postgres-notification:
+        condition: service_started
+    environment:
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: ${EUREKA_URL}
+      EUREKA_CLIENT_REGISTER_WITH_EUREKA: "true"
+      EUREKA_CLIENT_FETCH_REGISTRY: "true"
+    networks:
+      - ordertracker-network
+    restart: unless-stopped
+
+
+  # =========================
+  # LOGGING SERVICE
+  # =========================
+  logging-service:
+    build: ./logging-service
+    container_name: logging-service
+    ports:
+      - "8085:8085"
+    depends_on:
+      discovery-server:
+        condition: service_healthy
+      postgres-logging:
+        condition: service_started
+    environment:
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: ${EUREKA_URL}
+      EUREKA_CLIENT_REGISTER_WITH_EUREKA: "true"
+      EUREKA_CLIENT_FETCH_REGISTRY: "true"
+    networks:
+      - ordertracker-network
+    restart: unless-stopped
+
+
+  # =========================
+  # DATABASES
+  # =========================
+
+  postgres-auth:
+    image: postgres:15
+    container_name: postgres-auth
+    environment:
+      POSTGRES_DB: ${AUTH_DB}
+      POSTGRES_USER: ${AUTH_USER}
+      POSTGRES_PASSWORD: ${AUTH_PASS}
+    ports:
+      - "5433:5432"
+    networks:
+      - ordertracker-network
+    restart: unless-stopped
+
+
+  postgres-order:
+    image: postgres:15
+    container_name: postgres-order
+    environment:
+      POSTGRES_DB: ${ORDER_DB}
+      POSTGRES_USER: ${ORDER_USER}
+      POSTGRES_PASSWORD: ${ORDER_PASS}
+    ports:
+      - "5434:5432"
+    networks:
+      - ordertracker-network
+    restart: unless-stopped
+
+
+  postgres-webhook:
+    image: postgres:15
+    container_name: postgres-webhook
+    environment:
+      POSTGRES_DB: ${WEBHOOK_DB}
+      POSTGRES_USER: ${WEBHOOK_USER}
+      POSTGRES_PASSWORD: ${WEBHOOK_PASS}
+    ports:
+      - "5435:5432"
+    networks:
+      - ordertracker-network
+    restart: unless-stopped
+
+
+  postgres-logging:
+    image: postgres:15
+    container_name: postgres-logging
+    environment:
+      POSTGRES_DB: ${LOGGING_DB}
+      POSTGRES_USER: ${LOGGING_USER}
+      POSTGRES_PASSWORD: ${LOGGING_PASS}
+    ports:
+      - "5436:5432"
+    networks:
+      - ordertracker-network
+    restart: unless-stopped
+
+
+  postgres-notification:
+    image: postgres:15
+    container_name: postgres-notification
+    environment:
+      POSTGRES_DB: ${NOTIFICATION_DB}
+      POSTGRES_USER: ${NOTIFICATION_USER}
+      POSTGRES_PASSWORD: ${NOTIFICATION_PASS}
+    ports:
+      - "5437:5432"
+    networks:
+      - ordertracker-network
+    restart: unless-stopped
